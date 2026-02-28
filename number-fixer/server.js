@@ -10,7 +10,13 @@ const port = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
+// Serve static files from 'public' directory
 app.use(express.static('public'));
+
+// Root route for Vercel
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/public/index.html');
+});
 
 // ------------------------------------------------------------------
 // Logic from PowerShell script ported to JS
