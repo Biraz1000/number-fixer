@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Number Processing & Drive Upload</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; }
+        .container { border: 1px solid #ccc; padding: 20px; border-radius: 8px; }
+        textarea { width: 100%; height: 200px; font-family: monospace; }
+        button { padding: 10px 15px; background: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        .hidden { display: none; }
+        .row { display: flex; gap: 20px; margin-bottom: 10px; }
+        .col { flex: 1; }
+        #outputArea { background: #f9f9f9; }
+        .stats { margin-top: 10px; font-weight: bold; }
+        .alert { padding: 10px; background: #d4edda; color: #155724; border: 1px solid #c3e6cb; margin-top: 10px; display: none; }
+        .badge {
+            display: inline-block;
+            padding: 5px 10px;
+            margin: 2px;
+            background-color: #e9ecef;
+            color: #495057;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Number Processor & Google Drive Tool</h1>
+    
+    <div class="container">
+        <!-- Login Section -->
+        <div id="loginSection" style="margin-bottom: 20px; text-align: right;">
+            <button id="loginBtn" onclick="window.location.href='/auth/login'">Login with Google</button>
+            <span id="userStatus" class="hidden">Logged in to Google Drive ✅</span>
+        </div>
+
+        <div class="row">
+            <div class="col">
+                <h3>Input Data</h3>
+                <textarea id="inputText" placeholder="Paste your numbers here..."></textarea>
+            </div>
+            <div class="col">
+                <h3>Processed Output</h3>
+                <textarea id="outputText" readonly></textarea>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col">
+                <label><input type="checkbox" id="chkFix" checked> Fix Numbers (Ensure 234 prefix, 14 chars)</label><br>
+                <label><input type="checkbox" id="chkSort" checked> Sort & Group by Suffix (A-Z, Symbols)</label>
+            </div>
+            <div class="col" style="text-align: right;">
+                <button onclick="processData()">Process Data</button>
+                <button id="btnSaveDrive" onclick="saveToDrive()" disabled style="background: #28a745;">Save to Google Drive</button>
+                <button onclick="copyOutput()" style="background: #6c757d;">Copy Output</button>
+            </div>
+        </div>
+
+        <div id="stats" class="stats"></div>
+        <div id="statusMsg" class="alert"></div>
+
+    </div>
+
+    <script>
+        // Check for token in URL hash (simple auth handling for demo)
+        const urlParams = new URLSearchParams(window.location.search);
+        const token = urlParams.get('access_token');
+        
+        if (token) {
+            localStorage.setItem('gdrive_token', token);
+            window.history.replaceState({}, document.title, "/"); // Clean URL
+        }
+
+        const savedToken = localStorage.getItem('gdrive_token');
+        if (savedToken) {
+            document.getElementById('loginBtn').classList.add('hidden');
+            document.getElementById('userStatus').classList.remove('hidden');
+            document.getElementById('btnSaveDrive').disabled = false;
+        }
+
+        async function processData() {
+            const text = document.getElementById('inputText').value;
+            const fix = document.getElementById('chkFix').checked;
+            const sort = document.getElementById('chkSort').checked; // Backend handles both logic currently, can split if needed
+
+            if (!text.trim()) {
+                alert("Please enter some text");
+                return;
+            }
+
+            try {
+                // For this demo, we simulate processing on client or send to server.
+                // Since logic is complex (suffix grouping), let's use the server endpoint we built.
+                
+                // Note: The server logic currently combines fixing + sorting.
+                // Let's call the server API.
+                
+                const response = await fetch('/api/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text, fixNumbers: fix })
+                });
+                
+                const result = await response.json();
+                
+                if (result.error) throw new Error(result.error);
+                
+                document.getElementById('outputText').value = result.text;
+                
+                // Display Stats
+                let statText = `Processed: ${result.stats.totalLines} lines | Unique: ${result.stats.uniqueLines} | Groups: ${result.stats.groups}`;
+                
+                // Display Group Counts (e.g., A=200, a=100)
+                if (result.stats.groupCounts) {
+                    let groupDetails = [];
+                    for (let key in result.stats.groupCounts) {
+                        groupDetails.push(`<span class="badge">${key}=${result.stats.groupCounts[key]}</span>`);
+                    }
+                    statText += `<div style="margin-top:10px;">${groupDetails.join(' ')}</div>`;
+                }
+                
+                document.getElementById('stats').innerHTML = statText;
+                
+            } catch (err) {
+                alert("Error processing: " + err.message);
+            }
+        }
+
+        async function saveToDrive() {
+            const content = document.getElementById('outputText').value;
+            if (!content) {
+                alert("No output to save. Process data first.");
+                return;
+            }
+            
+            const token = localStorage.getItem('gdrive_token');
+            if (!token) {
+                alert("Please login first");
+                return;
+            }
+
+            document.getElementById('statusMsg').style.display = 'block';
+            document.getElementById('statusMsg').innerText = "Uploading to Drive...";
+
+            try {
+                const response = await fetch('/api/save-drive', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        content, 
+                        filename: `processed_numbers_${new Date().getTime()}.txt`,
+                        accessToken: token
+                    })
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    document.getElementById('statusMsg').innerHTML = 
+                        `Success! File saved to Drive. <a href="${result.link}" target="_blank">Open File</a>`;
+                } else {
+                    throw new Error("Upload failed");
+                }
+            } catch (err) {
+                document.getElementById('statusMsg').innerText = "Error uploading: " + err.message;
+                document.getElementById('statusMsg').style.background = "#f8d7da";
+                document.getElementById('statusMsg').style.color = "#721c24";
+            }
+        }
+
+        function copyOutput() {
+            const copyText = document.getElementById("outputText");
+            copyText.select();
+            document.execCommand("copy");
+            alert("Copied to clipboard");
+        }
+    </script>
+</body>
+</html>
